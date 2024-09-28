@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\OrderItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\OrderResource;
 use Illuminate\Support\Facades\Validator;
 use League\Config\Exception\ValidationException;
@@ -19,11 +20,23 @@ class OrderController extends Controller
      */
     public function index()
     {
+        $response = $this->verifyUser();
+
+        if ($response instanceof JsonResponse) {
+            return $response;
+        } else {
+            $userId = $response;
+        }
+
         $grandTotal = Order::sum('total_amount');
 
-        $orderWithItems = OrderResource::collection(Order::with(['orderItems.product', 'user'])->paginate(5))->additional(['total_order_amount' => $grandTotal]);;
+        // get the orders of authenticated user
+        $orders = Order::with(['orderItems.product', 'user'])
+            ->where('user_id', $userId)
+            ->paginate(10);
 
-        return $orderWithItems;
+        return OrderResource::collection($orders)
+            ->additional(['total_order_amount' => $grandTotal]);
     }
 
     /**
@@ -39,40 +52,31 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
+
+        $response = $this->verifyUser();
+
+        if ($response instanceof JsonResponse) {
+            return $response;
+        } else {
+            $userId = $response;
+        }
+
         DB::beginTransaction();
         try {
             $allProducts = Product::pluck('stock', 'id')->toArray();
 
             $orderItems = $request->all();
 
-            foreach ($orderItems as $key => $order) {
-                if (!array_key_exists('product_id', $order) || !array_key_exists('quantity', $order)) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Incorrect Request Format',
-                    ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
-                } else if ($order['quantity'] === 0) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Product quantity must be greater than 0',
-                    ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
-                } else if (! array_key_exists($order['product_id'], $allProducts)) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => "Product id: {$order['product_id']}  not found",
-                    ], JsonResponse::HTTP_NOT_FOUND);
-                } else if ($order['quantity'] > $allProducts[$order['product_id']]) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => "Product id: {$order['product_id']}  available stock is {$allProducts[$order['product_id']]}, but you ordered {$order['quantity']}",
-                    ], JsonResponse::HTTP_NOT_FOUND);
-                }
-            }
 
+            $response = $this->verifyRequest($allProducts, $orderItems);
+
+            if ($response instanceof JsonResponse) {
+                return $response;
+            }
 
             // Create the order
             $order = Order::create([
-                'user_id' => 1, // Assuming user is authenticated
+                'user_id' => $userId, // Assuming user is authenticated
                 'total_amount' => 0, // We will update this later
             ]);
 
@@ -126,27 +130,41 @@ class OrderController extends Controller
         return new OrderResource(Order::with(['orderItems.product', 'user'])->where('id', $orderId)->first());
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Order $order)
-    {
-        //
+    public function verifyRequest($allProducts, $orderItems) {
+        foreach ($orderItems as $key => $item) {
+            if (!array_key_exists('product_id', $item) || !array_key_exists('quantity', $item)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Incorrect Request Format',
+                ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+            } else if ($item['quantity'] === 0) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Product quantity must be greater than 0',
+                ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+            } else if (! array_key_exists($item['product_id'], $allProducts)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Product id: {$item['product_id']}  not found",
+                ], JsonResponse::HTTP_NOT_FOUND);
+            } else if ($item['quantity'] > $allProducts[$item['product_id']]) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Product id: {$item['product_id']}  available stock is {$allProducts[$item['product_id']]}, but you ordered {$order['quantity']}",
+                ], JsonResponse::HTTP_NOT_FOUND);
+            }
+        }
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Order $order)
+    public function verifyUser()
     {
-        //
-    }
+        if (Auth::guard()->user()) {
+            return Auth::guard()->user()->id;
+        }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Order $order)
-    {
-        //
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Please Provide valid JWT token to place the order',
+        ], JsonResponse::HTTP_UNAUTHORIZED);
     }
 }
