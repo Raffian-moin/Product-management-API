@@ -25,3 +25,14 @@ Route::group([
     Route::put('products/update/{id}', 'ProductController@update');
     Route::patch('products/update/partial/{id}', 'ProductController@updatePartial');
 });
+
+Route::group([
+    'middleware' => 'api',
+    'namespace' => 'App\Http\Controllers',
+    'prefix' => 'auth'
+], function ($router) {
+    Route::post('orders/store', 'OrderController@store');
+    Route::get('orders', 'OrderController@index');
+    Route::get('orders/details/{id}', 'OrderController@show');
+});
+
