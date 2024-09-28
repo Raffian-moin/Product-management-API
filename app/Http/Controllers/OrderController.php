@@ -20,15 +20,9 @@ class OrderController extends Controller
      */
     public function index()
     {
-        $response = $this->verifyUser();
+        $userId = Auth::guard()->user()->id;
 
-        if ($response instanceof JsonResponse) {
-            return $response;
-        } else {
-            $userId = $response;
-        }
-
-        $grandTotal = Order::sum('total_amount');
+        $grandTotal = Order::where('user_id', $userId)->sum('total_amount');
 
         // get the orders of authenticated user
         $orders = Order::with(['orderItems.product', 'user'])
@@ -52,14 +46,7 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
-
-        $response = $this->verifyUser();
-
-        if ($response instanceof JsonResponse) {
-            return $response;
-        } else {
-            $userId = $response;
-        }
+        $userId = Auth::guard()->user()->id;
 
         DB::beginTransaction();
         try {
@@ -127,7 +114,21 @@ class OrderController extends Controller
      */
     public function show($orderId)
     {
-        return new OrderResource(Order::with(['orderItems.product', 'user'])->where('id', $orderId)->first());
+        $userId = Auth::guard()->user()->id;
+
+        $order = Order::with(['orderItems.product', 'user'])
+            ->where('id', $orderId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (empty($order)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Your are not authorized to view the order",
+            ], JsonResponse::HTTP_FORBIDDEN);
+        }
+
+        return new OrderResource($order);
     }
 
     public function verifyRequest($allProducts, $orderItems) {
@@ -150,21 +151,9 @@ class OrderController extends Controller
             } else if ($item['quantity'] > $allProducts[$item['product_id']]) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => "Product id: {$item['product_id']}  available stock is {$allProducts[$item['product_id']]}, but you ordered {$order['quantity']}",
-                ], JsonResponse::HTTP_NOT_FOUND);
+                    'message' => "Product id: {$item['product_id']}  available stock is {$allProducts[$item['product_id']]}, but you ordered {$item['quantity']}",
+                ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
             }
         }
-    }
-
-    public function verifyUser()
-    {
-        if (Auth::guard()->user()) {
-            return Auth::guard()->user()->id;
-        }
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Please Provide valid JWT token to place the order',
-        ], JsonResponse::HTTP_UNAUTHORIZED);
     }
 }

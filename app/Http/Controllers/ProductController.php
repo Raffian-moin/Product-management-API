@@ -15,7 +15,7 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        return ProductResource::collection(Product::paginate(5));
+        return ProductResource::collection(Product::paginate(10));
     }
 
     /**
@@ -26,7 +26,7 @@ class ProductController extends Controller
         try {
             $request->validate([
                 'name' => 'bail|required|max:255',
-                'price' => 'required|numeric|0.01',
+                'price' => 'required|numeric|min:0.01',
                 'stock' => 'required|integer|min:0',
             ]);
 

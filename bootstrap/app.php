@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\AdminRole;
 use Illuminate\Foundation\Application;
+use App\Http\Middleware\AuthenticateUser;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
@@ -12,7 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->alias([
+            'admin' => AdminRole::class,
+            'authenticate.user' => AuthenticateUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

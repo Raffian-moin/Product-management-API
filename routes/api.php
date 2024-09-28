@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ProductController;
 
 Route::group([
     'middleware' => 'api',
@@ -14,22 +15,24 @@ Route::group([
     Route::post('me', 'AuthController@me');
 });
 
-Route::group([
-    'middleware' => 'api',
-    'namespace' => 'App\Http\Controllers',
-    'prefix' => 'auth'
-], function ($router) {
-    Route::get('products', 'ProductController@index');
-    Route::get('products/{id}', 'ProductController@show');
-    Route::post('products/store', 'ProductController@store');
-    Route::put('products/update/{id}', 'ProductController@update');
-    Route::patch('products/update/partial/{id}', 'ProductController@updatePartial');
-});
+Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::group([
-    'middleware' => 'api',
+    'middleware' => 'admin',
     'namespace' => 'App\Http\Controllers',
-    'prefix' => 'auth'
+    'prefix' => 'products'
+],
+    function ($router) {
+        Route::post('store', 'ProductController@store');
+        Route::put('/update/{id}', 'ProductController@update');
+        Route::patch('/update/partial/{id}', 'ProductController@updatePartial');
+    }
+);
+
+Route::group([
+    'middleware' => 'authenticate.user',
+    'namespace' => 'App\Http\Controllers',
 ], function ($router) {
     Route::post('orders/store', 'OrderController@store');
     Route::get('orders', 'OrderController@index');
